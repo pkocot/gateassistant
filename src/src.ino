@@ -1,7 +1,10 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <Wire.h>
+#include <BH1750.h>
 #include <string.h>
 
+// ------------ Configuration -----------
 #define WIFI_SSID      "MYSSID"
 #define WIFI_PASSWD    "***** ***"
 #define WIFI_HOST      "Gate-Assist"
@@ -10,11 +13,18 @@
 #define MQTT_USER      "USER"
 #define MQTT_PASSWD    "***** ***"
 #define MQTT_CLIENT_ID "GateAssistant"
+// --------------------------------------
 
-const char *mqtt_topic_prefix  = "gateassistant/sw";
+// measurement frequency (every 60s):
+#define PERIOD 60*1000L
+unsigned long target_time = 0L;
+
+const char *mqtt_topic_prefix = "gateassistant/sw";
+const char *mqtt_topic_light  = "gateassistant/light";
 
 WiFiClient netClient;
 PubSubClient mqttClient(netClient);
+BH1750 lightMeter;
 
 
 String getTopic(int sw) {
@@ -25,16 +35,16 @@ String getTopic(int sw) {
 int getPin(int sw) {
   switch(sw) {
     case 1:
-      return D0;
+      return D5;
       break;
     case 2:
-      return D1;
+      return D6;
       break;
     case 3:
-      return D2;
+      return D7;
       break;
     case 4:
-      return D3;
+      return D8;
       break;
   }
 }
@@ -58,11 +68,19 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void setup() {
+  for (int i=1; i<5; i++) {
+    pinMode(getPin(i), OUTPUT);
+    digitalWrite(getPin(i), HIGH);
+  }
+
   Serial.begin (9600);
-  delay(10);
+  Wire.begin();
+  lightMeter.begin();
+
+  delay(20);
   Serial.println('\n');
 
-  for (int i=1; i<5; i++) pinMode(getPin(i), OUTPUT);
+
 
   Serial.println("Connecting to WiFi");
   WiFi.mode(WIFI_STA);
@@ -82,7 +100,7 @@ void setup() {
     if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWD)) {
       Serial.println("connected");
     } else {
-      Serial.print("failed with state ");
+      Serial.print("failed with state: ");
       Serial.println(mqttClient.state());
       delay(2000);
     }
@@ -93,10 +111,14 @@ void setup() {
     mqttClient.subscribe(getTopic(i).c_str());
   }
 
-  for (int i=1; i<5; i++) digitalWrite(getPin(i), HIGH);
-
 }
 
 void loop() {
   mqttClient.loop();
+
+  if (millis() - target_time >= PERIOD) {
+    target_time += PERIOD;
+    float lux = lightMeter.readLightLevel();
+    mqttClient.publish(mqtt_topic_light, String(lux, 2).c_str());
+  }
 }
