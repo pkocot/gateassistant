@@ -1,12 +1,14 @@
-# gateassistant
-Home Gate controller
+# Home Gate Assistant
+Allows you to use the original remote control to control your devices.
+
+Easy to integrate with Home Assistant.
 
 ## Description:
 - Controls relays using the MQTT broker, allowing for example opening or closing gates.
   In my case it controls home gates via connected remote control.
 - Provides data from sensors, i.e. light level, temperature, atmospheric pressure.
   Sends metrics to MQTT broker.
-- Full compatibility with Home Assistant.
+
 
 ## Hardware:
 1. NodeMcu v3 (ESP8266)
