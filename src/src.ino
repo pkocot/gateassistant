@@ -182,6 +182,10 @@ void loop() {
         Serial.println(mqttClient.state());
         delay(2000);
       }
+      for(int i=1; i<5; i++) {
+        mqttClient.publish(getTopic(i).c_str(), "HIGH");
+        mqttClient.subscribe(getTopic(i).c_str());
+      }
     }
 
   }
