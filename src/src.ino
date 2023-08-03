@@ -58,6 +58,7 @@ int getPin(int sw) {
       return D8;
       break;
   }
+  return 0;
 }
 
 void shortPress(int sw) {
