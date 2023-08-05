@@ -6,14 +6,14 @@
 #include <string.h>
 
 // ------------ Configuration -----------
-// #define WIFI_SSID      "MYSSID"
-// #define WIFI_PASSWD    "***** ***"
-// #define WIFI_HOST      "Gate-Assist"
-// #define MQTT_SERVER    "ADDRESS"
-// #define MQTT_PORT      1883
-// #define MQTT_USER      "USER"
-// #define MQTT_PASSWD    "***** ***"
-// #define MQTT_CLIENT_ID "GateAssistant"
+#define WIFI_SSID      "MYSSID"
+#define WIFI_PASSWD    "***** ***"
+#define WIFI_HOST      "Gate-Assist"
+#define MQTT_SERVER    "ADDRESS"
+#define MQTT_PORT      1883
+#define MQTT_USER      "USER"
+#define MQTT_PASSWD    "***** ***"
+#define MQTT_CLIENT_ID "GateAssistant"
 
 #define BMP_ADDR    0x76
 #define BH1750_ADDR 0x23
@@ -31,6 +31,13 @@ const char *mqtt_topic_prefix      = "gateassistant/sw";
 const char *mqtt_topic_light       = "gateassistant/light";
 const char *mqtt_topic_temperature = "gateassistant/temperature";
 const char *mqtt_topic_pressure    = "gateassistant/pressure";
+const char *mqtt_topic_lock        = "gateassistant/lock";
+
+// Unlock time: 5s
+bool locked = true;
+unsigned long unlock_timestamp;
+#define UNLOCK_TIME 5*1000L
+
 
 WiFiClient netClient;
 BH1750 lightMeter;   // Light sensor
@@ -58,15 +65,20 @@ int getPin(int sw) {
       return D8;
       break;
   }
+  return 0;
 }
 
 void shortPress(int sw) {
-  digitalWrite(getPin(sw), LOW);
-  digitalWrite(LED, HIGH);
-  delay(1000);
-  digitalWrite(getPin(sw), HIGH);
-  digitalWrite(LED, LOW);
-  mqttClient.publish(getTopic(sw).c_str(), "HIGH");
+  if(!locked) {
+    digitalWrite(getPin(sw), LOW);
+    digitalWrite(LED, HIGH);
+    delay(1000);
+    digitalWrite(getPin(sw), HIGH);
+    digitalWrite(LED, LOW);
+    mqttClient.publish(getTopic(sw).c_str(), "HIGH");
+  } else {
+    mqttClient.publish(getTopic(sw).c_str(), "HIGH");
+  }
 }
 
 void blink(int count, int period=200) {
@@ -83,10 +95,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
   for (int i = 0; i < length; i++) {
     message = message + (char)payload[i];
   }
-  int sw_number = int(topic[strlen(topic)-1]) - '0';
-  if(message == "LOW") digitalWrite(getPin(sw_number), LOW);
-  if(message == "HIGH") digitalWrite(getPin(sw_number), HIGH);
-  if(message == "PRESS") shortPress(sw_number);
+  if(message == "UNLOCK") {
+    locked = false;
+    unlock_timestamp = millis();
+  } else if(message == "LOCK") {
+    locked = true;
+  } else {
+    int sw_number = int(topic[strlen(topic)-1]) - '0';
+    if(message == "LOW") digitalWrite(getPin(sw_number), LOW);
+    if(message == "HIGH") digitalWrite(getPin(sw_number), HIGH);
+    if(message == "PRESS") shortPress(sw_number);
+  }
 }
 
 void setup() {
@@ -145,11 +164,16 @@ void setup() {
     mqttClient.subscribe(getTopic(i).c_str());
   }
 
+  // Default locked
+  mqttClient.publish(mqtt_topic_lock, "LOCK");
+  mqttClient.subscribe(mqtt_topic_lock);
+
 }
 
 void loop() {
   mqttClient.loop();
 
+  // Publish sensor states every PERIOD seconds
   if (millis() - target_time >= PERIOD) {
     target_time += PERIOD;
 
@@ -189,4 +213,11 @@ void loop() {
     }
 
   }
+
+  // Lock again 5 seconds after UNLOCK message
+  if(!(locked) && millis() - unlock_timestamp >= UNLOCK_TIME) {
+    locked = true;
+    mqttClient.publish(mqtt_topic_lock, "LOCK");
+  }
+
 }
