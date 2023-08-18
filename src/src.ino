@@ -1,4 +1,5 @@
 #include <ESP8266WiFi.h>
+#include <Pinger.h>
 #include <PubSubClient.h>
 #include <Wire.h>
 #include <BH1750.h>
@@ -38,6 +39,7 @@ bool locked = true;
 unsigned long unlock_timestamp;
 #define UNLOCK_TIME 5*1000L
 
+Pinger pinger;
 
 WiFiClient netClient;
 BH1750 lightMeter;   // Light sensor
@@ -187,6 +189,15 @@ void loop() {
     mqttClient.publish(mqtt_topic_temperature, String(temp, 2).c_str());
     mqttClient.publish(mqtt_topic_pressure, String(hpa, 2).c_str());
     blink(1);
+
+    // Ping test
+    if (!pinger.Ping(MQTT_SERVER)) {
+      Serial.println("Ping problem...");
+      blink(20, 100);
+      ESP.restart();
+    } else {
+      Serial.println("Ping OK");
+    }
 
     // Check WIFI connection
     if (WiFi.status() != WL_CONNECTED) {
