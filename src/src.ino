@@ -5,6 +5,7 @@
 #include <BH1750.h>
 #include <Adafruit_BMP280.h>
 #include <string.h>
+#include <ESP8266WebServer.h>
 
 // ------------ Configuration -----------
 #define WIFI_SSID      "MYSSID"
@@ -34,6 +35,11 @@ const char *mqtt_topic_temperature = "gateassistant/temperature";
 const char *mqtt_topic_pressure    = "gateassistant/pressure";
 const char *mqtt_topic_lock        = "gateassistant/lock";
 
+float lux = 0.0;
+float hpa_local = 0.0;
+float hpa = 0.0;
+float temp = 0.0;
+
 // Unlock time: 5s
 bool locked = true;
 unsigned long unlock_timestamp;
@@ -44,6 +50,8 @@ Pinger pinger;
 WiFiClient netClient;
 BH1750 lightMeter;   // Light sensor
 Adafruit_BMP280 bmp; // Temperature and pressure sensor
+
+ESP8266WebServer server(80);
 
 PubSubClient mqttClient(netClient);
 
@@ -110,7 +118,71 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+// ----- HTTP -----
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <title>Gate Assistant</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-4bw+/aepP/YC94hEpVNVgiZdgIC5+VKNBQNGCHeKRQN+PtmoHDEXuppvnDJzQIu9" crossorigin="anonymous">
+  </head>
+  <body>
+    <center>
+      <h2>Gate Assistant</h2>
+      <button type="button" class="btn btn-primary" onclick="location.href='/temp/';">Temperature</button>
+      <button type="button" class="btn btn-primary" onclick="location.href='/light/';">Light</button>
+      <button type="button" class="btn btn-primary" onclick="location.href='/pressure/';">Pressure</button>
+      <p></p>
+      <button type="button" class="btn btn-warning" onclick="location.href='/reset/';">Reset</button>
+      <button type="button" class="btn btn-warning" onclick="location.href='/restart/';">Restart</button>
+  </body>
+</html> )rawliteral";
+
+void mainSite() {
+  server.send(200, "text/html", index_html);
+}
+
+void httpReset() {
+  ESP.reset();
+}
+
+void httpRestart() {
+  ESP.restart();
+}
+
+void httpTemp() {
+  server.send(404, "text/plain", String(temp));
+}
+
+void httpLight() {
+  server.send(404, "text/plain", String(lux));
+}
+
+void httpPressure() {
+  server.send(404, "text/plain", String(hpa));
+}
+
+void handleNotFound() { 
+   String message = "404 ...sorry";
+   server.send(404, "text/plain", message);
+}
+// --- HTTP END ---
+
 void setup() {
+
+  server.on("/", mainSite);
+  server.on("/reset/", httpReset);
+  server.on("/restart/", httpRestart);
+  server.on("/temp/", httpTemp);
+  server.on("/light/", httpLight);
+  server.on("/pressure/", httpPressure);
+
+
+  server.onNotFound(handleNotFound);
+  server.begin();
+  
   for (int i=1; i<5; i++) {
     pinMode(getPin(i), OUTPUT);
     digitalWrite(getPin(i), HIGH);
@@ -174,16 +246,17 @@ void setup() {
 
 void loop() {
   mqttClient.loop();
+  server.handleClient();
 
   // Publish sensor states every PERIOD seconds
   if (millis() - target_time >= PERIOD) {
     target_time += PERIOD;
 
     // Check the sensors
-    float lux = lightMeter.readLightLevel();
-    float hpa_local = bmp.readPressure()/100;
-    float hpa = hpa_local / pow(1-(altitude/44330), 5.225);
-    float temp = bmp.readTemperature();
+    lux = lightMeter.readLightLevel();
+    hpa_local = bmp.readPressure()/100;
+    hpa = hpa_local / pow(1-(altitude/44330), 5.225);
+    temp = bmp.readTemperature();
     Serial.printf("Light: %f Lux, Temp: %f C, Pressure: %f hPa\n", lux, temp, hpa);
     mqttClient.publish(mqtt_topic_light, String(lux, 2).c_str());
     mqttClient.publish(mqtt_topic_temperature, String(temp, 2).c_str());
@@ -194,7 +267,7 @@ void loop() {
     if (!pinger.Ping(MQTT_SERVER)) {
       Serial.println("Ping problem...");
       blink(20, 100);
-      ESP.restart();
+      ESP.reset();
     } else {
       Serial.println("Ping OK");
     }
@@ -202,8 +275,7 @@ void loop() {
     // Check WIFI connection
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println("WIFI Reconnecting...");
-      WiFi.disconnect();
-      WiFi.reconnect();
+      ESP.reset();
       blink(10, 100);
     }
 
@@ -213,6 +285,7 @@ void loop() {
       if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWD)) {
         Serial.println("MQTT connected");
       } else {
+        ESP.reset();
         Serial.print("MQTT connection failed with state: ");
         Serial.println(mqttClient.state());
         delay(2000);
