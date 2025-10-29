@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Gate Assistant - Garaż</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f1f1f1;
+      color: #222;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    h2 {
+      margin-bottom: 10px;
+    }
+    .sensors {
+      background: #fff;
+      padding: 15px;
+      margin: 15px auto;
+      border-radius: 10px;
+      max-width: 300px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .sensors div {
+      margin: 8px 0;
+      font-size: 18px;
+    }
+    .buttons {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-top: 20px;
+    }
+    button {
+      background-color: #f1c500;
+      border: none;
+      color: rgb(17, 17, 17);
+      padding: 15px 25px;
+      font-size: 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      width: 100px;
+    }
+    button:hover {
+      background-color: #b39200;
+    }
+    footer {
+      margin-top: 25px;
+      font-size: 13px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h2>Gate Assistant</h2>
+  <h3>Garaż</h3>
+
+  <div class="sensors">
+    <div>🌡️ Temperatura: <span id="temp">--</span> °C</div>
+    <div>🌤️ Światło: <span id="light">--</span> lx</div>
+    <div>📈 Ciśnienie (QNH): <span id="pressure">--</span> hPa</div>
+  </div>
+
+  <div class="buttons">
+    <button onclick="press(1)">Brama</button>
+    <button onclick="press(2)">Furtka</button>
+    <!-- <button onclick="press(3)">not used</button> -->
+    <button onclick="press(4)">Garaż</button>
+  </div>
+
+  <div class="buttons">
+    <button onclick="downloadLog()">Logi</button>
+  </div>
+
+  <footer>Gate Assistant © 2025 (ESP32-S3-DEV-KIT-N16R8)</footer>
+
+  <script>
+    async function updateSensors() {
+      try {
+        const [t, l, p] = await Promise.all([
+          fetch('/temp/').then(r => r.text()),
+          fetch('/light/').then(r => r.text()),
+          fetch('/pressure/').then(r => r.text())
+        ]);
+        document.getElementById('temp').textContent = parseFloat(t).toFixed(1);
+        document.getElementById('light').textContent = parseFloat(l).toFixed(1);
+        document.getElementById('pressure').textContent = parseFloat(p).toFixed(1);
+      } catch (e) {
+        console.error('Błąd pobierania danych:', e);
+      }
+    }
+
+    function downloadLog() {
+      window.location.href = '/log';
+    }
+
+    function press(n) {
+      fetch(`/toggle?button=${n}`);
+    }
+
+    updateSensors();
+    setInterval(updateSensors, 10000);
+  </script>
+</body>
+</html>

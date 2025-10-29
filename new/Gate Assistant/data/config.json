@@ -1,0 +1,13 @@
+{
+  "wifi_ssid": "SSID_NAME",
+  "wifi_pass": "*************",
+  "net_addr": "192.168.10.80",
+  "net_gw": "192.168.10.1",
+  "net_subnet": "255.255.255.0",
+  "Net_dns": "192.168.10.1",
+  "mqtt_server": "192.168.10.240",
+  "mqtt_port": "1883",
+  "mqtt_user": "login",
+  "mqtt_pass": "*********",
+  "mqtt_topic": "gateassistant"
+}
